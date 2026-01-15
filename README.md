@@ -332,3 +332,213 @@ logging.level.org.hibernate.type.descriptor.sql=TRACE
 * SQL logs are printed in the console
 
 ---
+
+Jackson → Entity binding issue,
+---
+
+## 🔍 What the Error Is REALLY Saying
+
+### SQL log (key clue)
+
+```sql
+insert into students (age, email, name) values (?, ?, ?)
+```
+
+### PostgreSQL error
+
+```
+Failing row contains (4, null, null, null)
+```
+
+👉 Hibernate **received a Student object where all fields were `null`**
+👉 Yet your JSON clearly has values
+
+This means:
+
+> ❌ The HTTP request body is NOT being converted into the `Student` object
+
+---
+
+## 🧠 Why This Happened (Root Cause)
+
+### Your Controller
+
+```java
+@PostMapping
+public ResponseEntity<Student> create(@RequestBody @Valid Student student) {
+    return ResponseEntity.ok(studentService.create(student));
+}
+```
+
+### Your JSON
+
+```json
+{
+  "name": "John",
+  "email": "john@gmail.com",
+  "age": 22
+}
+```
+
+### The Missing Piece ❌
+
+👉 **Jackson cannot set values if your entity has no setters**
+
+Jackson:
+
+* creates the object using the no-args constructor
+* tries to call setters
+* finds none (or incorrect ones)
+* leaves fields as `null`
+
+---
+
+## ✅ Verify This (Very Important Learning Step)
+
+Open your `Student` entity and check **carefully**:
+
+### ❌ Problematic Student Entity (Typical mistake)
+
+```java
+@Entity
+public class Student {
+
+    private Long id;
+    private String name;
+    private String email;
+    private Integer age;
+
+    // getters only ❌
+}
+```
+
+or:
+
+* setters are missing
+* setters are private
+* field names don’t match JSON
+
+---
+
+## ✅ Correct Student Entity (REQUIRED)
+
+```java
+@Entity
+@Table(name = "students")
+public class Student {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    @Column(nullable = false, unique = true)
+    private String email;
+
+    @Column(nullable = false)
+    private Integer age;
+
+    public Student() {} // REQUIRED by JPA & Jackson
+
+    // 🔑 REQUIRED SETTERS
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public void setAge(Integer age) {
+        this.age = age;
+    }
+
+    // getters
+}
+```
+
+---
+
+## 🧪 Why Validation Did NOT Catch This
+
+You used:
+
+```java
+@Valid
+```
+
+But:
+
+* Validation runs **after deserialization**
+* Deserialization already produced `null` values
+* Validation only checks constraints, not mapping success
+
+So:
+
+* Jackson failed silently
+* Hibernate hit DB
+* DB enforced NOT NULL
+
+This is **expected behavior**.
+
+---
+
+## 🔥 Very Important Lesson (Day-1 Gold)
+
+### ❗ Never use JPA entities directly as request bodies in real projects
+
+You did it **intentionally here for learning**, which is good.
+
+In production:
+
+```java
+POST → Request DTO → Entity
+```
+
+Why?
+
+* Prevents silent binding failures
+* Avoids exposing entity internals
+* Cleaner validation
+
+We will refactor to DTOs **after Day 2**, once JPA internals are solid.
+
+---
+
+## 🧠 Why This Bug Is GOOD for Learning
+
+You just learned:
+
+* Jackson deserialization rules
+* Entity vs DTO responsibility
+* Why SQL logs matter
+* Why DB constraints are last line of defense
+
+This is **exactly** the kind of bug senior engineers debug daily.
+
+---
+
+## ✅ Action Items (Do This Now)
+
+1. Add **setters** to `Student`
+2. Restart application
+3. Re-send POST request
+4. Observe SQL again
+
+You should now see:
+
+* non-null parameters
+* successful INSERT
+* no DB error
+
+---
+
+### Day 2 Preview
+
+* Read APIs
+* JPQL `SELECT`
+* Pagination (manual JPQL)
+* Hibernate flush timing
+* Why `open-in-view=false` matters
