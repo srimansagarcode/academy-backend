@@ -542,3 +542,237 @@ You should now see:
 * Pagination (manual JPQL)
 * Hibernate flush timing
 * Why `open-in-view=false` matters
+--------
+
+Great 👍
+That was a **textbook Day-1 learning bug**, and you handled it correctly.
+Now we move forward **cleanly and deliberately**.
+
+---
+
+# 🚀 Project Day 2
+
+## Student Read APIs + JPQL + Pagination (No Derived Queries)
+
+> 🎯 **Day 2 Goal**
+> You will:
+
+* Read data using **JPQL**
+* Implement **pagination properly**
+* Observe **Hibernate SELECT behavior**
+* Understand **flush timing & transactions**
+* Strengthen your mental model of JPA reads
+
+---
+
+## 🔒 Rules Still Apply
+
+* ❌ No derived queries
+* ✅ JPQL only
+* ✅ SQL logging ON
+* ✅ `open-in-view=false`
+
+---
+
+## 🧱 Step 1: StudentRepository — JPQL Reads
+
+### Add these methods (NO derived queries)
+
+```java
+@Repository
+public interface StudentRepository extends JpaRepository<Student, Long> {
+
+    @Query("""
+        SELECT s FROM Student s
+        ORDER BY s.id
+    """)
+    List<Student> findAllStudents();
+
+    @Query("""
+        SELECT s FROM Student s
+        WHERE s.age >= :minAge
+        ORDER BY s.name
+    """)
+    List<Student> findStudentsWithMinAge(@Param("minAge") Integer minAge);
+}
+```
+
+📌 Why this matters:
+
+* You are **explicitly choosing JPQL**
+* You are controlling sorting
+* No magic method parsing
+
+---
+
+## 🧱 Step 2: Pagination with JPQL (IMPORTANT)
+
+### Repository
+
+```java
+@Query("""
+    SELECT s FROM Student s
+    ORDER BY s.id
+""")
+Page<Student> findAllStudents(Pageable pageable);
+```
+
+📌 Spring Data:
+
+* applies pagination **after JPQL**
+* generates `LIMIT / OFFSET`
+* still JPQL → SQL
+
+---
+
+## 🧱 Step 3: Service Layer (Read-Only Transactions)
+
+```java
+@Service
+public class StudentService {
+
+    private final StudentRepository repository;
+
+    public StudentService(StudentRepository repository) {
+        this.repository = repository;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Student> getAll() {
+        return repository.findAllStudents();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Student> getAllPaged(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return repository.findAllStudents(pageable);
+    }
+}
+```
+
+📌 Why `readOnly = true`?
+
+* No dirty checking
+* Better performance
+* Clear intent
+
+---
+
+## 🧱 Step 4: Controller — Read APIs
+
+```java
+@GetMapping
+public ResponseEntity<List<Student>> getAll() {
+    return ResponseEntity.ok(studentService.getAll());
+}
+
+@GetMapping("/paged")
+public ResponseEntity<Page<Student>> getPaged(
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "5") int size
+) {
+    return ResponseEntity.ok(studentService.getAllPaged(page, size));
+}
+```
+
+---
+
+## 🧪 Step 5: Test & Observe SQL (VERY IMPORTANT)
+
+### Call
+
+```
+GET /api/v1/students
+```
+
+Watch SQL:
+
+```sql
+select s.id, s.age, s.email, s.name from students s order by s.id
+```
+
+---
+
+### Call
+
+```
+GET /api/v1/students/paged?page=0&size=2
+```
+
+Watch SQL:
+
+```sql
+select s.id, s.age, s.email, s.name
+from students s
+order by s.id
+limit ? offset ?
+```
+
+Hibernate is now:
+
+* translating JPQL
+* applying pagination
+* generating DB-specific SQL
+
+---
+
+## 🧠 CRITICAL LEARNING (Read Carefully)
+
+### 1️⃣ Pagination is NOT JPQL
+
+JPQL has no `LIMIT`.
+
+Spring Data:
+
+* modifies SQL **after translation**
+* DB dialect decides syntax
+
+---
+
+### 2️⃣ Why `ORDER BY` is mandatory
+
+Pagination without ordering is **undefined behavior**.
+
+Always sort when paginating.
+
+---
+
+### 3️⃣ Why no extra SELECT?
+
+Because:
+
+* no relationships yet
+* no lazy loading
+* clean transaction scope
+
+---
+
+## 🧪 Optional Experiment (Do This)
+
+Inside service:
+
+```java
+@Transactional
+public void testFlush() {
+    Student s = repository.findById(1L).get();
+    s.setName("Updated Name");
+}
+```
+
+Watch logs:
+
+* UPDATE happens **at transaction commit**
+* Not immediately
+
+This is **dirty checking** in action.
+
+---
+
+## 🧠 Questions You MUST Answer (Write Them Down)
+
+1️⃣ Why does Hibernate not run UPDATE immediately?
+2️⃣ Why does pagination require ORDER BY?
+3️⃣ Why is JPQL portable but SQL is not?
+4️⃣ What happens if `readOnly = true` and you modify entity?
+
+---
