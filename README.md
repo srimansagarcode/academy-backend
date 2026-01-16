@@ -1055,3 +1055,284 @@ Answer these in your own words:
 3️⃣ Where does pagination apply — JPQL or SQL?
 
 ---
+
+
+# 🚀 Project Day 4
+
+## Sorting + Advanced Filters (Production-Grade Search API)
+
+> 🎯 **Day 4 Goal**
+> You will:
+
+* Add **multi-column sorting**
+* Prevent **invalid column attacks**
+* Safely handle **dynamic filters**
+* Understand **why naive implementations break in prod**
+
+This directly fixes real-world issues you faced earlier.
+
+---
+
+## 🔴 Real-World Problem
+
+Frontend sends:
+
+```json
+{
+  "page": 0,
+  "size": 5,
+  "search": "john",
+  "sorting": [
+    { "field": "name", "direction": "asc" },
+    { "field": "age", "direction": "desc" }
+  ],
+  "filters": {
+    "age": 22
+  }
+}
+```
+
+Problems to solve:
+
+* How do we sort dynamically?
+* How do we prevent invalid fields?
+* How do we avoid SQL injection–style issues?
+
+---
+
+## 🧱 Step 1: Extend Search Request DTO
+
+```java
+package academy.academy_backend.api.v1.dto.request;
+
+import java.util.List;
+import java.util.Map;
+
+public class StudentSearchRequest {
+
+    private int page;
+    private int size;
+    private String search;
+    private Map<String, Object> filters;
+    private List<SortField> sorting;
+
+    public static class SortField {
+        private String field;
+        private String direction;
+
+        public String getField() { return field; }
+        public void setField(String field) { this.field = field; }
+
+        public String getDirection() { return direction; }
+        public void setDirection(String direction) { this.direction = direction; }
+    }
+
+    // getters & setters omitted for brevity
+}
+```
+
+---
+
+## 🧠 Key Security Rule (Memorize This)
+
+> **Never trust column names from the client.**
+
+Even if it’s not SQL injection, it can:
+
+* crash queries
+* expose internals
+* break production
+
+---
+
+## 🧱 Step 2: Allowed Fields Whitelist
+
+```java
+package academy.academy_backend.api.v1.specification;
+
+import java.util.Set;
+
+public class StudentSearchFields {
+
+    public static final Set<String> SORTABLE_FIELDS = Set.of(
+            "id",
+            "name",
+            "email",
+            "age"
+    );
+
+    public static final Set<String> FILTERABLE_FIELDS = Set.of(
+            "age"
+    );
+}
+```
+
+📌 This is **non-negotiable** in production.
+
+---
+
+## 🧱 Step 3: Safe Sorting Builder
+
+```java
+import org.springframework.data.domain.Sort;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class SortBuilder {
+
+    public static Sort build(List<StudentSearchRequest.SortField> sorting) {
+
+        if (sorting == null || sorting.isEmpty()) {
+            return Sort.by("id").ascending();
+        }
+
+        List<Sort.Order> orders = new ArrayList<>();
+
+        for (var sortField : sorting) {
+
+            if (!StudentSearchFields.SORTABLE_FIELDS.contains(sortField.getField())) {
+                continue; // silently ignore invalid fields
+            }
+
+            Sort.Direction direction =
+                    "desc".equalsIgnoreCase(sortField.getDirection())
+                            ? Sort.Direction.DESC
+                            : Sort.Direction.ASC;
+
+            orders.add(new Sort.Order(direction, sortField.getField()));
+        }
+
+        return orders.isEmpty()
+                ? Sort.by("id").ascending()
+                : Sort.by(orders);
+    }
+}
+```
+
+---
+
+## 🧱 Step 4: Safe Filter Validation
+
+Update `StudentSpecification`:
+
+```java
+if (filters != null) {
+    for (var entry : filters.entrySet()) {
+
+        if (!StudentSearchFields.FILTERABLE_FIELDS.contains(entry.getKey())) {
+            continue; // ignore invalid filters
+        }
+
+        predicate = cb.and(
+                predicate,
+                cb.equal(root.get(entry.getKey()), entry.getValue())
+        );
+    }
+}
+```
+
+📌 This prevents:
+
+* invalid field access
+* runtime exceptions
+* accidental data exposure
+
+---
+
+## 🧱 Step 5: Update Service (Sorting + Paging)
+
+```java
+@Transactional(readOnly = true)
+public Page<Student> search(StudentSearchRequest request) {
+
+    Sort sort = SortBuilder.build(request.getSorting());
+
+    Pageable pageable = PageRequest.of(
+            request.getPage(),
+            request.getSize(),
+            sort
+    );
+
+    Specification<Student> spec =
+            StudentSpecification.withSearchAndFilters(
+                    request.getSearch(),
+                    request.getFilters()
+            );
+
+    return studentRepository.findAll(spec, pageable);
+}
+```
+
+---
+
+## 🧪 Step 6: Test & Observe SQL
+
+### Request
+
+```json
+{
+  "page": 0,
+  "size": 5,
+  "search": "john",
+  "sorting": [
+    { "field": "name", "direction": "asc" },
+    { "field": "age", "direction": "desc" }
+  ],
+  "filters": {
+    "age": 22,
+    "password": "hack"   // ignored safely
+  }
+}
+```
+
+### SQL
+
+```sql
+order by s.name asc, s.age desc
+```
+
+🔥 Clean, predictable, safe.
+
+---
+
+## 🧠 Critical Learnings (Lock These In)
+
+### 1️⃣ Sorting belongs in Pageable, not Specification
+
+Specification = WHERE
+Pageable = ORDER BY + LIMIT/OFFSET
+
+---
+
+### 2️⃣ Whitelisting fields is mandatory
+
+Never dynamically trust client-provided fields.
+
+---
+
+### 3️⃣ Ignoring invalid input is safer than failing hard
+
+Failing hard leaks system behavior.
+
+---
+
+## 🔥 Why This Is Enterprise-Level Design
+
+* Safe dynamic APIs
+* No query explosion
+* Frontend-friendly
+* Backward compatible
+* Easy to extend
+
+This is **exactly how real search APIs are written**.
+
+---
+
+## 🛠 Your Reflection (Short Answers)
+
+1️⃣ Why is sorting NOT part of Specification?
+2️⃣ Why do we whitelist fields instead of throwing errors?
+3️⃣ What happens if you allow arbitrary field names?
+
+---
