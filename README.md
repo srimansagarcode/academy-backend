@@ -1336,3 +1336,259 @@ This is **exactly how real search APIs are written**.
 3️⃣ What happens if you allow arbitrary field names?
 
 ---
+
+# 🚀 Project Day 5
+
+## DTO Mapping + Clean API Contracts (Production Rule)
+
+> 🎯 **Day 5 Goal**
+> You will:
+
+* Stop exposing JPA entities
+* Introduce **Request DTOs & Response DTOs**
+* Control API shape explicitly
+* Understand **why entities must never leak**
+* Prepare the codebase for relationships (Day 6+)
+
+---
+
+## 🔴 The Core Rule (Memorize This)
+
+> **JPA entities are NOT API models.**
+
+Entities:
+
+* are persistence models
+* change frequently
+* contain lazy proxies
+* are tied to DB concerns
+
+DTOs:
+
+* are API contracts
+* stable
+* explicit
+* frontend-friendly
+
+---
+
+## 🧠 What We’ll Change Today
+
+### ❌ Before (Learning Phase)
+
+```java
+ResponseEntity<Student>
+```
+
+### ✅ After (Production)
+
+```java
+ResponseEntity<StudentResponseDTO>
+```
+
+---
+
+## 🧱 Step 1: Define Request & Response DTOs
+
+### 📥 StudentCreateRequest (POST)
+
+```java
+package academy.academy_backend.api.v1.dto.request;
+
+import jakarta.validation.constraints.*;
+
+public class StudentCreateRequest {
+
+    @NotBlank
+    private String name;
+
+    @NotBlank
+    @Email
+    private String email;
+
+    @Min(18)
+    private Integer age;
+
+    // getters & setters
+}
+```
+
+---
+
+### 📤 StudentResponseDTO (API Output)
+
+```java
+package academy.academy_backend.api.v1.dto.response;
+
+public class StudentResponseDTO {
+
+    private Long id;
+    private String name;
+    private String email;
+    private Integer age;
+
+    // getters & setters
+}
+```
+
+---
+
+## 🧱 Step 2: Mapper (Manual on Purpose)
+
+> ❌ No MapStruct yet
+> ✅ Manual mapping to understand flow
+
+```java
+package academy.academy_backend.api.v1.mapper;
+
+import academy.academy_backend.domain.student.Student;
+import academy.academy_backend.api.v1.dto.request.StudentCreateRequest;
+import academy.academy_backend.api.v1.dto.response.StudentResponseDTO;
+
+public class StudentMapper {
+
+    public static Student toEntity(StudentCreateRequest request) {
+        Student s = new Student();
+        s.setName(request.getName());
+        s.setEmail(request.getEmail());
+        s.setAge(request.getAge());
+        return s;
+    }
+
+    public static StudentResponseDTO toDTO(Student student) {
+        StudentResponseDTO dto = new StudentResponseDTO();
+        dto.setId(student.getId());
+        dto.setName(student.getName());
+        dto.setEmail(student.getEmail());
+        dto.setAge(student.getAge());
+        return dto;
+    }
+}
+```
+
+📌 Manual mapping builds **clarity**, not boilerplate fear.
+
+---
+
+## 🧱 Step 3: Update Service Layer
+
+```java
+@Transactional
+public StudentResponseDTO create(StudentCreateRequest request) {
+
+    Student student = StudentMapper.toEntity(request);
+    Student saved = studentRepository.save(student);
+
+    return StudentMapper.toDTO(saved);
+}
+```
+
+---
+
+```java
+@Transactional(readOnly = true)
+public StudentResponseDTO getById(Long id) {
+
+    Student student = studentRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Student not found"));
+
+    return StudentMapper.toDTO(student);
+}
+```
+
+---
+
+## 🧱 Step 4: Update Controller
+
+```java
+@PostMapping
+public ResponseEntity<StudentResponseDTO> create(
+        @RequestBody @Valid StudentCreateRequest request
+) {
+    return ResponseEntity.ok(studentService.create(request));
+}
+```
+
+---
+
+```java
+@GetMapping("/{id}")
+public ResponseEntity<StudentResponseDTO> get(@PathVariable Long id) {
+    return ResponseEntity.ok(studentService.getById(id));
+}
+```
+
+---
+
+## 🧱 Step 5: Update Search Response
+
+```java
+@PostMapping("/search")
+public ResponseEntity<Page<StudentResponseDTO>> search(
+        @RequestBody StudentSearchRequest request
+) {
+    return ResponseEntity.ok(studentService.search(request));
+}
+```
+
+Service:
+
+```java
+@Transactional(readOnly = true)
+public Page<StudentResponseDTO> search(StudentSearchRequest request) {
+
+    Page<Student> page = studentRepository.findAll(spec, pageable);
+
+    return page.map(StudentMapper::toDTO);
+}
+```
+
+📌 `Page.map()` is **clean and efficient**.
+
+---
+
+## 🧠 Why This Matters (Deep Reason)
+
+### ❌ Exposing entities causes:
+
+* LazyInitializationException
+* Accidental data exposure
+* Infinite JSON recursion
+* Tight coupling with DB
+
+### ✅ DTOs give:
+
+* Stable API contracts
+* Versioning control
+* Security
+* Clean evolution
+
+---
+
+## 🔥 Interview-Ready Answers
+
+**Q:** Why not return entities directly?
+**A:** Entities represent persistence state, not API contracts.
+
+**Q:** Where should mapping happen?
+**A:** Between service and controller.
+
+**Q:** Why manual mapping first?
+**A:** To understand data flow before automation.
+
+---
+
+## 🧠 Phase Checkpoint
+
+You have now completed:
+
+✅ JPQL CRUD
+✅ Pagination
+✅ Specifications
+✅ Sorting & filtering
+✅ Safe API design
+✅ DTO mapping
+
+This is **solid backend foundation**.
+
+---

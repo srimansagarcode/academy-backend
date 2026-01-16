@@ -1,6 +1,9 @@
 package academy.academy_backend.service.impl;
 
+import academy.academy_backend.api.v1.dto.request.StudentCreateRequest;
 import academy.academy_backend.api.v1.dto.request.StudentSearchRequest;
+import academy.academy_backend.api.v1.dto.response.StudentResponseDTO;
+import academy.academy_backend.api.v1.mapper.StudentMapper;
 import academy.academy_backend.api.v1.specification.SortBuilder;
 import academy.academy_backend.api.v1.specification.StudentSpecification;
 import academy.academy_backend.domain.student.Student;
@@ -24,14 +27,18 @@ public class StudentService {
     }
 
     @Transactional
-    public Student create(Student student) {
-        return studentRepository.save(student);
+    public StudentResponseDTO create(StudentCreateRequest studentCreateRequest) {
+        Student student = StudentMapper.toEntity(studentCreateRequest);
+        Student saved = studentRepository.save(student);
+
+        return StudentMapper.toDTO(saved);
     }
 
     @Transactional(readOnly = true)
-    public Student getById(Long id) {
-        return studentRepository.findById(id)
+    public StudentResponseDTO getById(Long id) {
+        Student student = studentRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Student Not Found"));
+        return StudentMapper.toDTO(student);
     }
 
     @Transactional(readOnly = true)
@@ -46,7 +53,7 @@ public class StudentService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Student> search(StudentSearchRequest studentSearchRequest) {
+    public Page<StudentResponseDTO> search(StudentSearchRequest studentSearchRequest) {
         Sort sort = SortBuilder.build(studentSearchRequest.getSorting());
 
         Pageable pageable = PageRequest.of(
@@ -59,6 +66,7 @@ public class StudentService {
                         studentSearchRequest.getSearch(),
                         studentSearchRequest.getFilters()
                 );
-        return studentRepository.findAll(spec, pageable);
+        Page<Student> page = studentRepository.findAll(spec, pageable);
+        return page.map(StudentMapper::toDTO);
     }
 }
