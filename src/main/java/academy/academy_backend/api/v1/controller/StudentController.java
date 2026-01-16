@@ -1,6 +1,8 @@
 package academy.academy_backend.api.v1.controller;
 
+import academy.academy_backend.api.v1.dto.request.StudentCreateRequest;
 import academy.academy_backend.api.v1.dto.request.StudentSearchRequest;
+import academy.academy_backend.api.v1.dto.response.StudentResponseDTO;
 import academy.academy_backend.domain.student.Student;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -20,12 +22,13 @@ public class StudentController {
     }
 
     @PostMapping
-    public ResponseEntity<Student> create(@RequestBody @Valid Student student) {
+    public ResponseEntity<StudentResponseDTO> create(
+            @RequestBody @Valid StudentCreateRequest student) {
         return ResponseEntity.ok(studentService.create(student));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Student> get(@PathVariable Long id) {
+    public ResponseEntity<StudentResponseDTO> get(@PathVariable Long id) {
         return ResponseEntity.ok(studentService.getById(id));
     }
 
@@ -43,7 +46,8 @@ public class StudentController {
     }
 
     @PostMapping("/search")
-    public ResponseEntity<Page<Student>> search(@RequestBody StudentSearchRequest studentSearchRequest) {
+    public ResponseEntity<Page<StudentResponseDTO>> search(
+            @RequestBody StudentSearchRequest studentSearchRequest) {
         return ResponseEntity.ok(studentService.search(studentSearchRequest));
     }
 }
