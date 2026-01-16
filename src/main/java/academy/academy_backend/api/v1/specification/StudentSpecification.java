@@ -28,6 +28,9 @@ public class StudentSpecification {
 
             if(filters != null) {
                 for(Map.Entry<String, Object> entry: filters.entrySet()){
+                    if(!StudentSearchFields.FILTERABLE_FIELDS.contains(entry.getKey())){
+                        continue;
+                    }
                     predicate = cb.and(predicate,
                             cb.equal(root.get(entry.getKey()), entry.getValue())
                             );
