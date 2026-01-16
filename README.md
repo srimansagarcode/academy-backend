@@ -776,3 +776,282 @@ This is **dirty checking** in action.
 4️⃣ What happens if `readOnly = true` and you modify entity?
 
 ---
+
+---
+
+# 🚀 Project Day 3
+
+## Dynamic Search API using Specifications (The Right Way)
+
+> 🎯 **Day 3 Goal**
+> You will:
+
+* Build a real **search API**
+* Understand **why derived queries are insufficient**
+* Learn **Specification composition**
+* Control **filter + search + pagination + sorting**
+* See exactly how Hibernate builds SQL
+
+This directly connects to the pain you experienced earlier in your projects.
+
+---
+
+## 🔴 Problem Statement (Real-World)
+
+Frontend sends a payload like:
+
+```json
+{
+  "page": 0,
+  "size": 5,
+  "search": "john",
+  "filters": {
+    "age": 22
+  }
+}
+```
+
+Requirements:
+
+* Search by **name OR email**
+* Filters are optional
+* Pagination mandatory
+* Sorting later
+* Clean, scalable design
+
+👉 **Derived queries CANNOT handle this**.
+
+---
+
+## 🧠 Why Derived Queries Fail Here
+
+To support this dynamically, you would need methods like:
+
+```java
+findByNameContainingAndAge(...)
+findByEmailContainingAndAge(...)
+findByNameContaining(...)
+findByEmailContaining(...)
+```
+
+❌ Explosion of methods
+❌ Impossible to maintain
+❌ Still static
+
+👉 This is exactly why **Specifications exist**.
+
+---
+
+## 🧱 Step 1: Create Search Request DTO
+
+```java
+package academy.academy_backend.api.v1.dto.request;
+
+import java.util.Map;
+
+public class StudentSearchRequest {
+
+    private int page;
+    private int size;
+    private String search;
+    private Map<String, Object> filters;
+
+    public int getPage() { return page; }
+    public void setPage(int page) { this.page = page; }
+
+    public int getSize() { return size; }
+    public void setSize(int size) { this.size = size; }
+
+    public String getSearch() { return search; }
+    public void setSearch(String search) { this.search = search; }
+
+    public Map<String, Object> getFilters() { return filters; }
+    public void setFilters(Map<String, Object> filters) { this.filters = filters; }
+}
+```
+
+📌 This mirrors real frontend payloads.
+
+---
+
+## 🧱 Step 2: Create StudentSpecification
+
+```java
+package academy.academy_backend.api.v1.specification;
+
+import academy.academy_backend.domain.student.Student;
+import org.springframework.data.jpa.domain.Specification;
+
+import jakarta.persistence.criteria.Predicate;
+import java.util.Map;
+
+public class StudentSpecification {
+
+    public static Specification<Student> withSearchAndFilters(
+            String search,
+            Map<String, Object> filters
+    ) {
+        return (root, query, cb) -> {
+
+            Predicate predicate = cb.conjunction(); // TRUE
+
+            // 🔍 Search (name OR email)
+            if (search != null && !search.isBlank()) {
+                String pattern = "%" + search.toLowerCase() + "%";
+                Predicate searchPredicate = cb.or(
+                        cb.like(cb.lower(root.get("name")), pattern),
+                        cb.like(cb.lower(root.get("email")), pattern)
+                );
+                predicate = cb.and(predicate, searchPredicate);
+            }
+
+            // 🎯 Filters (equals-based)
+            if (filters != null) {
+                for (Map.Entry<String, Object> entry : filters.entrySet()) {
+                    predicate = cb.and(
+                            predicate,
+                            cb.equal(root.get(entry.getKey()), entry.getValue())
+                    );
+                }
+            }
+
+            return predicate;
+        };
+    }
+}
+```
+
+📌 Key concept:
+
+* `cb.conjunction()` = neutral TRUE predicate
+* Conditions added only if present
+* Fully dynamic
+
+---
+
+## 🧱 Step 3: Update Repository (Enable Specifications)
+
+```java
+public interface StudentRepository
+        extends JpaRepository<Student, Long>,
+                JpaSpecificationExecutor<Student> {
+}
+```
+
+📌 No methods needed — Specifications drive everything.
+
+---
+
+## 🧱 Step 4: Service Layer (Search Logic)
+
+```java
+@Transactional(readOnly = true)
+public Page<Student> search(StudentSearchRequest request) {
+
+    Pageable pageable = PageRequest.of(
+            request.getPage(),
+            request.getSize()
+    );
+
+    Specification<Student> spec =
+            StudentSpecification.withSearchAndFilters(
+                    request.getSearch(),
+                    request.getFilters()
+            );
+
+    return studentRepository.findAll(spec, pageable);
+}
+```
+
+📌 Clean separation:
+
+* Controller → request
+* Service → logic
+* Specification → query
+
+---
+
+## 🧱 Step 5: Controller Endpoint
+
+```java
+@PostMapping("/search")
+public ResponseEntity<Page<Student>> search(
+        @RequestBody StudentSearchRequest request
+) {
+    return ResponseEntity.ok(studentService.search(request));
+}
+```
+
+---
+
+## 🧪 Step 6: Test with Postman
+
+### POST `/api/v1/students/search`
+
+```json
+{
+  "page": 0,
+  "size": 5,
+  "search": "john",
+  "filters": {
+    "age": 22
+  }
+}
+```
+
+### Observe SQL
+
+You should see:
+
+```sql
+select ...
+from students s
+where (
+    lower(s.name) like ?
+    or lower(s.email) like ?
+)
+and s.age = ?
+limit ? offset ?
+```
+
+🔥 This is **exactly** what we wanted.
+
+---
+
+## 🧠 Critical Learnings (Lock These In)
+
+### 1️⃣ Specification ≠ Query
+
+It’s a **predicate builder**.
+
+### 2️⃣ `cb.conjunction()` is mandatory
+
+Never return `null`.
+
+### 3️⃣ This design scales
+
+Add new filters without touching repository.
+
+---
+
+## 🔥 Why This Is Senior-Level Design
+
+* No query explosion
+* Fully dynamic
+* Easy to extend
+* Matches frontend needs
+* SQL is predictable
+
+This is **why your earlier project search was the right instinct** — now it’s clean and intentional.
+
+---
+
+## 🛠 Your Tasks (Very Important)
+
+Answer these in your own words:
+
+1️⃣ Why are derived queries unsuitable for search APIs?
+2️⃣ Why is `cb.conjunction()` used instead of `null`?
+3️⃣ Where does pagination apply — JPQL or SQL?
+
+---

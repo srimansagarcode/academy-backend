@@ -1,10 +1,13 @@
 package academy.academy_backend.service.impl;
 
+import academy.academy_backend.api.v1.dto.request.StudentSearchRequest;
+import academy.academy_backend.api.v1.specification.StudentSpecification;
 import academy.academy_backend.domain.student.Student;
 import academy.academy_backend.repository.StudentRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,5 +41,19 @@ public class StudentService {
     public Page<Student> getAllPaged(int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         return studentRepository.findAllStudentsPage(pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Student> search(StudentSearchRequest studentSearchRequest) {
+        Pageable pageable = PageRequest.of(
+                studentSearchRequest.getPage(),
+                studentSearchRequest.getSize()
+        );
+        Specification<Student> spec =
+                StudentSpecification.withSearchAndFilters(
+                        studentSearchRequest.getSearch(),
+                        studentSearchRequest.getFilters()
+                );
+        return studentRepository.findAll(spec, pageable);
     }
 }

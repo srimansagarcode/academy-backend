@@ -1,5 +1,6 @@
 package academy.academy_backend.api.v1.controller;
 
+import academy.academy_backend.api.v1.dto.request.StudentSearchRequest;
 import academy.academy_backend.domain.student.Student;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -39,5 +40,10 @@ public class StudentController {
             @RequestParam(defaultValue = "5") int size
     ) {
         return ResponseEntity.ok(studentService.getAllPaged(page, size));
+    }
+
+    @PostMapping("/search")
+    public ResponseEntity<Page<Student>> search(@RequestBody StudentSearchRequest studentSearchRequest) {
+        return ResponseEntity.ok(studentService.search(studentSearchRequest));
     }
 }
