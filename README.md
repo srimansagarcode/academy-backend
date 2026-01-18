@@ -1751,3 +1751,218 @@ Now you’re **ready for clean architecture**.
 ✅ YES — and we will from **Day 7**
 
 ---
+
+# 📘 **Spring Boot JPA Learning – Day 7**
+
+## **Cascade Types & Orphan Removal**
+
+This topic is **very important** for real-world backend development and interviews.
+
+---
+
+## 🎯 **Day 7 Objectives**
+
+By the end of this day, you will:
+
+* Understand **Cascade types**
+* Learn **orphanRemoval**
+* Know **when and when NOT to use cascade**
+* Implement examples using **Student – Course**
+* Avoid common mistakes
+
+---
+
+## 1️⃣ What is Cascade in JPA?
+
+**Cascade** means:
+
+> When you perform an operation on a parent entity, the same operation is automatically applied to its related child entities.
+
+Example:
+
+* Save Student → Courses also saved
+* Delete Student → Courses also deleted
+
+---
+
+## 2️⃣ Cascade Types (Important for Interviews)
+
+```java
+CascadeType.PERSIST
+CascadeType.MERGE
+CascadeType.REMOVE
+CascadeType.REFRESH
+CascadeType.DETACH
+CascadeType.ALL
+```
+
+### 🔹 Commonly Used:
+
+| Cascade Type | Meaning                              |
+| ------------ | ------------------------------------ |
+| `PERSIST`    | Saves child when parent is saved     |
+| `MERGE`      | Updates child when parent is updated |
+| `REMOVE`     | Deletes child when parent is deleted |
+| `ALL`        | Applies all above                    |
+
+---
+
+## 3️⃣ Example: Student – Course (OneToMany)
+
+### Student Entity
+
+```java
+@Entity
+public class Student {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name;
+
+    @OneToMany(
+        mappedBy = "student",
+        cascade = CascadeType.ALL,
+        orphanRemoval = true
+    )
+    private List<Course> courses = new ArrayList<>();
+}
+```
+
+### Course Entity
+
+```java
+@Entity
+public class Course {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String courseName;
+
+    @ManyToOne
+    @JoinColumn(name = "student_id")
+    private Student student;
+}
+```
+
+---
+
+## 4️⃣ What is `orphanRemoval = true`?
+
+👉 It removes **child records** that are no longer linked to the parent.
+
+### Example:
+
+```java
+student.getCourses().remove(0);
+studentRepository.save(student);
+```
+
+✅ Result:
+
+* That course row is **deleted from DB**
+
+❌ Without `orphanRemoval = true`:
+
+* Course remains in DB (orphan record)
+
+---
+
+## 5️⃣ Cascade vs Orphan Removal (Very Important)
+
+| Feature            | Cascade          | Orphan Removal   |
+| ------------------ | ---------------- | ---------------- |
+| Works on           | Parent operation | Child removal    |
+| Example            | save(), delete() | remove from list |
+| Deletes child      | Yes (REMOVE)     | Yes              |
+| Interview favorite | ✅                | ✅                |
+
+---
+
+## 6️⃣ Real-World Example
+
+### Saving Student with Courses
+
+```java
+Student s = new Student();
+s.setName("Vidya");
+
+Course c1 = new Course();
+c1.setCourseName("Java");
+
+Course c2 = new Course();
+c2.setCourseName("Spring Boot");
+
+c1.setStudent(s);
+c2.setStudent(s);
+
+s.getCourses().add(c1);
+s.getCourses().add(c2);
+
+studentRepository.save(s);
+```
+
+✅ Saves:
+
+* 1 Student
+* 2 Courses automatically
+
+---
+
+### Removing a Course
+
+```java
+student.getCourses().remove(0);
+studentRepository.save(student);
+```
+
+✅ Course deleted from DB (because of `orphanRemoval = true`)
+
+---
+
+## 7️⃣ ⚠️ Common Mistakes (Interview Question)
+
+### ❌ Mistake 1:
+
+```java
+cascade = CascadeType.ALL
+```
+
+Used blindly → causes **unexpected deletes**
+
+### ❌ Mistake 2:
+
+Using `REMOVE` in `@ManyToOne`
+➡️ Dangerous (can delete parent)
+
+### ❌ Mistake 3:
+
+Not setting both sides of relation
+
+```java
+course.setStudent(student); // mandatory
+```
+
+---
+
+## 8️⃣ Best Practices ✅
+
+✔ Use `CascadeType.PERSIST, MERGE` instead of ALL
+✔ Use `orphanRemoval = true` only for strong ownership
+✔ Avoid cascade REMOVE in `@ManyToOne`
+✔ Always maintain both sides of relation
+
+---
+
+## 9️⃣ Interview Questions (Very Important)
+
+❓ Difference between Cascade and Orphan Removal
+❓ When to use CascadeType.ALL?
+❓ What happens if orphanRemoval = false?
+❓ Can orphanRemoval delete DB records?
+❓ Difference between delete and orphanRemoval
+
+---
