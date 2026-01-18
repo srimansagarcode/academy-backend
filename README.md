@@ -1592,3 +1592,162 @@ You have now completed:
 This is **solid backend foundation**.
 
 ---
+Excellent question 👍
+This shows you’re now **thinking like an API designer**, not just following code.
+
+Let me answer clearly and honestly.
+
+---
+
+## ✅ Short Answer
+
+You are **absolutely right** to question this.
+
+> Using `Course` entity directly in the controller is **NOT the ideal design**.
+
+I did it **intentionally for Day 6 only**, to teach **relationship mechanics first**, not API design.
+
+From Day 7 onward → we **must switch to `CourseCreateRequest`**
+(and you were correct to notice the inconsistency 👏)
+
+---
+
+## 🎯 Why I Temporarily Used `Course` Directly
+
+### Day 6 goal was **NOT DTO design**
+
+It was to teach:
+
+✅ Owning side
+✅ Foreign key behavior
+✅ How `student_id` is set
+✅ How JPA persists relationships
+✅ Cascade behavior
+✅ LAZY loading
+
+If we added DTO + mapper + validation **at the same time**, you would not clearly see:
+
+* where the FK comes from
+* when it is assigned
+* how Hibernate flushes it
+* how relationships are persisted
+
+So this was **a teaching simplification**, not a best practice.
+
+---
+
+## ❗ Important Rule (Now You’re Ready For It)
+
+> **Entities should NEVER be used in controllers in real projects.**
+
+You already followed this rule for:
+
+* Student ✔
+* Search ✔
+* DTO mapping ✔
+
+So your instinct is 100% correct.
+
+---
+
+## ✅ Proper Design (What We’ll Do Next)
+
+### ✔ Correct Version (What You Expected)
+
+### 1️⃣ CourseCreateRequest
+
+```java
+public class CourseCreateRequest {
+    private String title;
+    private Integer credits;
+
+    // getters & setters
+}
+```
+
+---
+
+### 2️⃣ Controller (Correct Way)
+
+```java
+@PostMapping
+public ResponseEntity<CourseResponseDTO> createCourse(
+        @PathVariable Long studentId,
+        @RequestBody CourseCreateRequest request
+) {
+    return ResponseEntity.ok(
+            courseService.createCourse(studentId, request)
+    );
+}
+```
+
+---
+
+### 3️⃣ Service (Correct Way)
+
+```java
+@Transactional
+public CourseResponseDTO createCourse(
+        Long studentId,
+        CourseCreateRequest request
+) {
+    Student student = studentRepository.findById(studentId)
+            .orElseThrow(() -> new RuntimeException("Student not found"));
+
+    Course course = new Course();
+    course.setTitle(request.getTitle());
+    course.setCredits(request.getCredits());
+    course.setStudent(student);
+
+    Course saved = courseRepository.save(course);
+    return CourseMapper.toDTO(saved);
+}
+```
+
+---
+
+### 4️⃣ Why This Is Better
+
+| Concern      | Old Way      | Correct Way |
+| ------------ | ------------ | ----------- |
+| API contract | Leaks entity | Clean DTO   |
+| Validation   | Weak         | Strong      |
+| Coupling     | High         | Low         |
+| Security     | Risky        | Safe        |
+| Refactoring  | Hard         | Easy        |
+
+---
+
+## 🧠 Why I Did NOT Do This Earlier (Important Insight)
+
+If I had introduced:
+
+* DTO
+* Mapper
+* Relationship
+* FK logic
+* Cascade rules
+
+…all at once, it would become **mechanical copying**, not learning.
+
+So Day 6 was:
+
+> “Understand relationships first, clean architecture later”
+
+Now you’re **ready for clean architecture**.
+
+---
+
+## ✅ Final Answer to Your Question
+
+> ❓ Why did you use `Course` entity directly?
+
+✔ To isolate **JPA relationship behavior**
+✔ To reduce moving parts while learning
+✔ NOT because it’s best practice
+
+> ❓ Should we use CourseCreateRequest instead?
+
+✅ YES — and we will from **Day 7**
+
+---

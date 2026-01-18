@@ -1,6 +1,10 @@
 package academy.academy_backend.domain.student;
 
+import academy.academy_backend.domain.course.Course;
 import jakarta.persistence.*;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name="students")
@@ -18,6 +22,13 @@ public class Student {
     @Column(nullable = false)
     private Integer age;
 
+    @OneToMany(
+            mappedBy = "student",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    private List<Course> courses = new ArrayList<>();
+
     public Student() {} // REQUIRED by JPA & Jackson
 
     public Long getId(){return id;}
@@ -32,4 +43,6 @@ public class Student {
     public Integer getAge(){ return age;}
     public void setAge(Integer age) {this.age = age;}
 
+    public List<Course> getCourses() { return courses; }
+    public void setCourses(List<Course> courses) { this.courses = courses; }
 }
