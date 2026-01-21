@@ -1966,3 +1966,224 @@ course.setStudent(student); // mandatory
 ❓ Difference between delete and orphanRemoval
 
 ---
+Perfect 👍
+This is one of the **most important JPA topics** for real-world projects and interviews.
+
+---
+
+# 📘 **Spring Boot JPA – Day 8**
+
+## **Fetch Types (LAZY vs EAGER)**
+
+---
+
+## 🎯 Day 8 Objectives
+
+By the end of this session, you will:
+
+* Understand **FetchType.LAZY vs FetchType.EAGER**
+* Know **default fetch types**
+* Understand **N+1 query problem**
+* Learn **best practices**
+* Be ready for **interview questions**
+
+---
+
+## 1️⃣ What is Fetch Type?
+
+Fetch type defines:
+
+> **When related entities are loaded from the database**
+
+---
+
+## 2️⃣ Types of Fetching
+
+```java
+FetchType.LAZY
+FetchType.EAGER
+```
+
+---
+
+## 3️⃣ Default Fetch Types (Very Important)
+
+| Relationship  | Default Fetch |
+| ------------- | ------------- |
+| `@OneToMany`  | LAZY          |
+| `@ManyToMany` | LAZY          |
+| `@ManyToOne`  | EAGER         |
+| `@OneToOne`   | EAGER         |
+
+⚠️ Many developers fail interviews here.
+
+---
+
+## 4️⃣ FetchType.EAGER
+
+### Example
+
+```java
+@ManyToOne(fetch = FetchType.EAGER)
+private Student student;
+```
+
+### Behavior
+
+* Parent + Child loaded immediately
+* Single query or join
+* Can cause **performance issues**
+
+### SQL Example
+
+```sql
+SELECT * FROM student;
+SELECT * FROM course;
+```
+
+or sometimes:
+
+```sql
+SELECT * FROM student
+JOIN course ON ...
+```
+
+---
+
+## 5️⃣ FetchType.LAZY (Recommended)
+
+### Example
+
+```java
+@OneToMany(fetch = FetchType.LAZY)
+private List<Course> courses;
+```
+
+### Behavior
+
+* Data loaded **only when accessed**
+* Uses proxy objects
+* Better performance
+
+---
+
+## 6️⃣ ⚠️ LazyInitializationException (Very Important)
+
+### Scenario:
+
+```java
+Student student = studentRepo.findById(1L).get();
+student.getCourses().size(); // ❌ Error
+```
+
+### Error:
+
+```
+LazyInitializationException:
+could not initialize proxy – no Session
+```
+
+### Why?
+
+Because:
+
+* Session closed
+* Lazy data accessed outside transaction
+
+---
+
+## 7️⃣ How to Fix LazyInitializationException
+
+### ✅ Option 1: Use @Transactional
+
+```java
+@Transactional
+public Student getStudent(Long id) {
+    return studentRepository.findById(id).get();
+}
+```
+
+---
+
+### ✅ Option 2: Use JOIN FETCH (Best)
+
+```java
+@Query("SELECT s FROM Student s JOIN FETCH s.courses WHERE s.id = :id")
+Student findWithCourses(@Param("id") Long id);
+```
+
+---
+
+### ✅ Option 3: DTO Projection (Recommended for APIs)
+
+```java
+SELECT new com.dto.StudentDTO(s.name, c.courseName)
+FROM Student s JOIN s.courses c
+```
+
+---
+
+## 8️⃣ N+1 Query Problem (🔥 Interview Favorite)
+
+### Example:
+
+```java
+List<Student> students = studentRepo.findAll();
+
+for(Student s : students) {
+    s.getCourses().size();
+}
+```
+
+### Queries Executed:
+
+1. One query → fetch students
+2. N queries → each student’s courses
+
+💥 Performance issue!
+
+---
+
+## 9️⃣ Fix for N+1 Problem
+
+### ✅ Solution 1: JOIN FETCH
+
+```java
+@Query("SELECT DISTINCT s FROM Student s JOIN FETCH s.courses")
+List<Student> findAllWithCourses();
+```
+
+---
+
+### ✅ Solution 2: EntityGraph
+
+```java
+@EntityGraph(attributePaths = {"courses"})
+List<Student> findAll();
+```
+
+---
+
+## 🔟 Best Practices (Very Important)
+
+✔ Always use **LAZY** by default
+✔ Use **JOIN FETCH** only when needed
+✔ Avoid EAGER in collections
+✔ Use DTOs for APIs
+✔ Never expose entities directly to UI
+✔ Monitor SQL logs (`spring.jpa.show-sql=true`)
+
+---
+
+## 🧠 Interview Questions
+
+1. Difference between LAZY and EAGER?
+2. Default fetch types in JPA?
+3. What is N+1 problem?
+4. How to fix LazyInitializationException?
+5. When to use JOIN FETCH?
+6. Why EAGER is dangerous?
+
+---
+
+## ✅ Day 8 Completed 🎉
