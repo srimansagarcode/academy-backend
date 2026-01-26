@@ -43,8 +43,11 @@ public class StudentService {
     }
 
     @Transactional(readOnly = true)
-    public List<Student> getAll() {
-        return studentRepository.findAllStudents();
+    public List<StudentResponseDTO> getAll() {
+        return studentRepository.findAllStudents()
+                .stream()
+                .map(StudentMapper::toDTO)
+                .toList();
     }
 
     @Transactional(readOnly = true)

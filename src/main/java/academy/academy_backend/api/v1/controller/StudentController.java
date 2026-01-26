@@ -33,7 +33,7 @@ public class StudentController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Student>> getAll() {
+    public ResponseEntity<List<StudentResponseDTO>> getAll() {
         return ResponseEntity.ok(studentService.getAll());
     }
 

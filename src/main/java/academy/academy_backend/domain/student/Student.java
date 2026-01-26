@@ -1,5 +1,6 @@
 package academy.academy_backend.domain.student;
 
+import academy.academy_backend.domain.audit.BaseEntity;
 import academy.academy_backend.domain.course.Course;
 import jakarta.persistence.*;
 
@@ -8,7 +9,7 @@ import java.util.List;
 
 @Entity
 @Table(name="students")
-public class Student {
+public class Student extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
