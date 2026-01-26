@@ -3794,4 +3794,216 @@ GET /students/99
 ## ✅ Day 12 Completed 🎉
 
 ---
+Perfect 👍
+Let’s continue exactly where you should — this is **Day 13: JPA Auditing**, and it’s a **must-have skill in real enterprise projects**.
+
+---
+
+# 📘 Day 13 – JPA Auditing
+
+### *(createdAt, updatedAt, createdBy, updatedBy)*
+
+---
+
+## 🎯 Goal of Day 13
+
+By the end of this day, you will:
+
+* Automatically track **createdAt / updatedAt**
+* Understand **@MappedSuperclass**
+* Use **@EnableJpaAuditing**
+* Implement **AuditorAware**
+* Follow **enterprise-grade audit design**
+* Avoid common mistakes
+
+---
+
+## 1️⃣ Why JPA Auditing Is Important
+
+In real projects, every table usually needs:
+
+| Field      | Purpose                 |
+| ---------- | ----------------------- |
+| created_at | When record was created |
+| updated_at | Last update time        |
+| created_by | Who created             |
+| updated_by | Who modified            |
+
+Without auditing:
+❌ No tracking
+❌ No debugging
+❌ No compliance
+
+---
+
+## 2️⃣ Step 1 – Enable JPA Auditing
+
+### ✅ Main Application Class
+
+```java
+@SpringBootApplication
+@EnableJpaAuditing
+public class AcademyBackendApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(AcademyBackendApplication.class, args);
+    }
+}
+```
+
+⚠️ Without this → auditing will NOT work.
+
+---
+
+## 3️⃣ Step 2 – Create Base Audit Class
+
+### ✅ `BaseEntity.java`
+
+```java
+@MappedSuperclass
+@EntityListeners(AuditingEntityListener.class)
+public abstract class BaseEntity {
+
+    @CreatedDate
+    @Column(updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+
+    // getters & setters
+}
+```
+
+### 🔍 Why `@MappedSuperclass`?
+
+✔ Fields inherited by child entities
+✔ No separate table
+✔ Clean design
+
+---
+
+## 4️⃣ Step 3 – Extend in Your Entities
+
+### Example: Student Entity
+
+```java
+@Entity
+public class Student extends BaseEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name;
+    private String email;
+}
+```
+
+✅ Automatically:
+
+* createdAt → on INSERT
+* updatedAt → on UPDATE
+
+---
+
+## 5️⃣ Step 4 – Enable Auditor (createdBy / updatedBy)
+
+### Create Auditor Provider
+
+```java
+@Component
+public class AuditorAwareImpl implements AuditorAware<String> {
+
+    @Override
+    public Optional<String> getCurrentAuditor() {
+        // Later this comes from Spring Security
+        return Optional.of("SYSTEM");
+    }
+}
+```
+
+---
+
+## 6️⃣ Step 5 – Extend Audit Fields
+
+```java
+@MappedSuperclass
+@EntityListeners(AuditingEntityListener.class)
+public abstract class BaseEntity {
+
+    @CreatedDate
+    @Column(updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+
+    @CreatedBy
+    @Column(updatable = false)
+    private String createdBy;
+
+    @LastModifiedBy
+    private String updatedBy;
+}
+```
+
+---
+
+## 7️⃣ What Happens Automatically?
+
+| Operation | Result                |
+| --------- | --------------------- |
+| INSERT    | createdAt + createdBy |
+| UPDATE    | updatedAt + updatedBy |
+| MANUAL    | ❌ No need to set      |
+
+✔ Zero manual coding
+✔ Fully automated
+
+---
+
+## 8️⃣ Real Production Example
+
+### Table Output
+
+```text
+id | name | created_at | updated_at | created_by | updated_by
+1  | John | 2026-01-27 | 2026-01-28 | admin | admin
+```
+
+---
+
+## 9️⃣ Common Mistakes ❌
+
+❌ Forgetting `@EnableJpaAuditing`
+❌ Not using `@EntityListeners`
+❌ Putting auditing in DTO
+❌ Using LocalDate instead of LocalDateTime
+❌ Overwriting audit fields manually
+
+---
+
+## 🧠 Interview Questions (Very Important)
+
+### ❓ What is JPA Auditing?
+
+➡ Automatically tracks entity changes like createdAt, updatedAt.
+
+### ❓ Difference between @MappedSuperclass and @Entity?
+
+➡ MappedSuperclass has no table, Entity does.
+
+### ❓ How does createdBy work?
+
+➡ Using `AuditorAware<T>`
+
+### ❓ Where is auditing used?
+
+➡ Logging, compliance, debugging, enterprise systems
+
+---
+
+## ✅ Day 13 Completed 🎉
+
+---
 
