@@ -7,6 +7,7 @@ import academy.academy_backend.api.v1.mapper.StudentMapper;
 import academy.academy_backend.api.v1.specification.SortBuilder;
 import academy.academy_backend.api.v1.specification.StudentSpecification;
 import academy.academy_backend.domain.student.Student;
+import academy.academy_backend.exception.ResourceNotFoundException;
 import academy.academy_backend.repository.StudentRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -37,7 +38,7 @@ public class StudentService {
     @Transactional(readOnly = true)
     public StudentResponseDTO getById(Long id) {
         Student student = studentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Student Not Found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
         return StudentMapper.toDTO(student);
     }
 

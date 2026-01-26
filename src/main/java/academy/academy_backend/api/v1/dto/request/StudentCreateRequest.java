@@ -3,6 +3,13 @@ package academy.academy_backend.api.v1.dto.request;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class StudentCreateRequest {
     @NotBlank
@@ -23,4 +30,6 @@ public class StudentCreateRequest {
 
     public Integer getAge() { return age;}
     public void setAge(Integer age) { this.age = age; }
+
+
 }

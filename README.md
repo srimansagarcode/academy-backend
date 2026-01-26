@@ -1748,6 +1748,303 @@ Now you’re **ready for clean architecture**.
 
 > ❓ Should we use CourseCreateRequest instead?
 
+Perfect 👍
+Welcome to **Day 6 — the most important turning point in JPA learning**.
+
+From today onward, you stop writing “single-table CRUD” and start working with **real-world relational modeling**.
+
+---
+
+# 🚀 Day 6 – Student → Course Relationship (JPA Core)
+
+## 🎯 Day 6 Goals
+
+By the end of today, you will:
+
+* Understand **OneToMany / ManyToOne** correctly
+* Know **who owns the relationship**
+* Create **Course entity & table**
+* Avoid common JPA relationship bugs
+* Expose `/students/{id}/courses`
+* Understand why DTOs are mandatory for relations
+
+---
+
+# 🧠 Core Concept (Before Writing Code)
+
+### ❗Golden Rule
+
+> **The side with the foreign key is the OWNER.**
+
+In DB:
+
+```
+student (id)
+course (id, student_id)  ← FK here
+```
+
+So:
+
+* ✅ `Course` → **Owning side**
+* ❌ `Student` → Inverse side
+
+---
+
+# 🧱 Step 1: Create Course Entity
+
+```java
+package academy.academy_backend.domain.course;
+
+import academy.academy_backend.domain.student.Student;
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "courses")
+public class Course {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String title;
+
+    @Column(nullable = false)
+    private Integer credits;
+
+    // ✅ Owning side
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_id", nullable = false)
+    private Student student;
+
+    public Course() {}
+
+    // getters & setters
+}
+```
+
+### 🔑 Important Notes
+
+* `@ManyToOne` → owns the FK
+* `@JoinColumn` → creates `student_id`
+* `fetch = LAZY` → avoids unnecessary joins
+
+---
+
+# 🧱 Step 2: Update Student Entity
+
+```java
+@OneToMany(
+    mappedBy = "student",
+    cascade = CascadeType.ALL,
+    orphanRemoval = true
+)
+private List<Course> courses = new ArrayList<>();
+```
+
+### ❗ Important
+
+* `mappedBy = "student"` → refers to field in `Course`
+* Student does **NOT** own the relation
+* No `@JoinColumn` here
+
+---
+
+# 🧠 Relationship Mental Model
+
+| Concept         | Meaning                   |
+| --------------- | ------------------------- |
+| `@ManyToOne`    | FK holder                 |
+| `@OneToMany`    | Inverse view              |
+| `mappedBy`      | "I don't own this"        |
+| `cascade`       | Auto-save child           |
+| `orphanRemoval` | Auto-delete removed child |
+
+---
+
+# 🧱 Step 3: Course Repository
+
+```java
+package academy.academy_backend.repository;
+
+import academy.academy_backend.domain.course.Course;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface CourseRepository extends JpaRepository<Course, Long> {
+
+    List<Course> findByStudentId(Long studentId);
+}
+```
+
+---
+
+# 🧱 Step 4: Course DTO
+
+```java
+package academy.academy_backend.api.v1.dto.response;
+
+public class CourseResponseDTO {
+
+    private Long id;
+    private String title;
+    private Integer credits;
+    private Long studentId;
+
+    // getters & setters
+}
+```
+
+---
+
+# 🧱 Step 5: Course Mapper
+
+```java
+public class CourseMapper {
+
+    public static CourseResponseDTO toDTO(Course course) {
+        CourseResponseDTO dto = new CourseResponseDTO();
+        dto.setId(course.getId());
+        dto.setTitle(course.getTitle());
+        dto.setCredits(course.getCredits());
+        dto.setStudentId(course.getStudent().getId());
+        return dto;
+    }
+}
+```
+
+---
+
+# 🧱 Step 6: Course Service
+
+```java
+@Service
+public class CourseService {
+
+    private final CourseRepository courseRepository;
+    private final StudentRepository studentRepository;
+
+    public CourseService(CourseRepository courseRepository,
+                         StudentRepository studentRepository) {
+        this.courseRepository = courseRepository;
+        this.studentRepository = studentRepository;
+    }
+
+    @Transactional
+    public CourseResponseDTO createCourse(Long studentId, Course course) {
+
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new RuntimeException("Student not found"));
+
+        course.setStudent(student);
+        Course saved = courseRepository.save(course);
+
+        return CourseMapper.toDTO(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseResponseDTO> getCoursesByStudent(Long studentId) {
+        return courseRepository.findByStudentId(studentId)
+                .stream()
+                .map(CourseMapper::toDTO)
+                .toList();
+    }
+}
+```
+
+---
+
+# 🧱 Step 7: Controller
+
+```java
+@RestController
+@RequestMapping("/api/v1/students/{studentId}/courses")
+public class CourseController {
+
+    private final CourseService courseService;
+
+    public CourseController(CourseService courseService) {
+        this.courseService = courseService;
+    }
+
+    @PostMapping
+    public ResponseEntity<CourseResponseDTO> createCourse(
+            @PathVariable Long studentId,
+            @RequestBody Course course
+    ) {
+        return ResponseEntity.ok(
+                courseService.createCourse(studentId, course)
+        );
+    }
+
+    @GetMapping
+    public ResponseEntity<List<CourseResponseDTO>> getCourses(
+            @PathVariable Long studentId
+    ) {
+        return ResponseEntity.ok(
+                courseService.getCoursesByStudent(studentId)
+        );
+    }
+}
+```
+
+---
+
+# 🧪 Example Request
+
+### POST
+
+```
+POST /api/v1/students/1/courses
+```
+
+```json
+{
+  "title": "Spring Boot",
+  "credits": 4
+}
+```
+
+### GET
+
+```
+GET /api/v1/students/1/courses
+```
+
+---
+
+# 🧠 Critical Concepts You Just Learned
+
+✅ Owning vs inverse side
+✅ FK belongs to Course
+✅ Why DTOs are mandatory
+✅ How relationships actually work
+✅ Why cascading is powerful
+✅ Why Student should NOT save Course directly
+
+---
+
+# ❗ Common Mistakes (Avoid These)
+
+❌ Putting `@JoinColumn` on Student
+❌ Returning `Student` entity directly
+❌ Using EAGER fetch
+❌ Bidirectional JSON serialization
+❌ Saving course without student
+
+---
+
+# ✅ Day 6 Completed
+
+You now:
+
+* Understand relationships
+* Can model real DB relations
+* Are ready for performance topics
+
+---
+
 ✅ YES — and we will from **Day 7**
 
 ---
@@ -2187,3 +2484,1314 @@ List<Student> findAll();
 ---
 
 ## ✅ Day 8 Completed 🎉
+Perfect 👍
+You’re progressing exactly in the right order.
+**Day 9 is extremely important** for real projects, performance tuning, and interviews.
+
+---
+
+# 📘 **Spring Boot JPA – Day 9**
+
+## **JPQL & Native Queries (Very Important for Real Projects)**
+
+---
+
+## 🎯 Day 9 Objectives
+
+By the end of this session, you will:
+
+* Understand **JPQL vs Native Query**
+* Know **when to use which**
+* Write **custom queries**
+* Use **DTO projections**
+* Handle **real-world query use cases**
+* Be interview-ready
+
+---
+
+## 1️⃣ What is JPQL?
+
+**JPQL (Java Persistence Query Language)**
+→ Works on **Entity & Fields**, not tables.
+
+✔ Database independent
+✔ Object-oriented
+✔ Uses entity names, not table names
+
+---
+
+## 2️⃣ JPQL vs SQL (Important Difference)
+
+| JPQL             | SQL                   |
+| ---------------- | --------------------- |
+| Uses Entity name | Uses Table name       |
+| Uses field names | Uses column names     |
+| DB independent   | DB dependent          |
+| Recommended      | Used only when needed |
+
+---
+
+## 3️⃣ Basic JPQL Example
+
+### Entity
+
+```java
+@Entity
+public class Student {
+    @Id
+    private Long id;
+    private String name;
+    private String email;
+}
+```
+
+---
+
+### Repository
+
+```java
+public interface StudentRepository extends JpaRepository<Student, Long> {
+
+    @Query("SELECT s FROM Student s")
+    List<Student> findAllStudents();
+}
+```
+
+✔ Uses **Student (Entity name)**
+❌ Not `student` table
+
+---
+
+## 4️⃣ JPQL with WHERE Clause
+
+```java
+@Query("SELECT s FROM Student s WHERE s.name = :name")
+List<Student> findByName(@Param("name") String name);
+```
+
+---
+
+## 5️⃣ JPQL with Multiple Conditions
+
+```java
+@Query("""
+    SELECT s FROM Student s
+    WHERE s.name = :name
+    AND s.email = :email
+""")
+Student findByNameAndEmail(String name, String email);
+```
+
+---
+
+## 6️⃣ JPQL with JOIN (Very Important)
+
+```java
+@Query("""
+    SELECT s FROM Student s
+    JOIN s.courses c
+    WHERE c.courseName = :course
+""")
+List<Student> findStudentsByCourse(String course);
+```
+
+✔ Uses **entity relationship**
+✔ No table join syntax
+
+---
+
+## 7️⃣ DTO Projection (Best Practice 🚀)
+
+### DTO
+
+```java
+public class StudentCourseDTO {
+    private String studentName;
+    private String courseName;
+
+    public StudentCourseDTO(String studentName, String courseName) {
+        this.studentName = studentName;
+        this.courseName = courseName;
+    }
+}
+```
+
+---
+
+### JPQL DTO Query
+
+```java
+@Query("""
+    SELECT new com.dto.StudentCourseDTO(
+        s.name,
+        c.courseName
+    )
+    FROM Student s
+    JOIN s.courses c
+""")
+List<StudentCourseDTO> fetchStudentCourses();
+```
+
+✅ Faster
+✅ Clean API response
+✅ Best practice
+
+---
+
+## 8️⃣ Native Query (SQL)
+
+Used when:
+
+* Complex joins
+* Database-specific features
+* Performance tuning
+* Stored procedures
+
+---
+
+### Example
+
+```java
+@Query(
+  value = "SELECT * FROM student WHERE email = :email",
+  nativeQuery = true
+)
+Student findByEmailNative(@Param("email") String email);
+```
+
+---
+
+## 9️⃣ Native Query with JOIN
+
+```java
+@Query(
+  value = """
+      SELECT s.name, c.course_name
+      FROM student s
+      JOIN course c ON s.id = c.student_id
+      WHERE s.id = :id
+  """,
+  nativeQuery = true
+)
+List<Object[]> getStudentCourse(Long id);
+```
+
+⚠️ Returns `Object[]` → Not type safe
+
+---
+
+## 🔟 JPQL vs Native Query (Interview Table)
+
+| Feature        | JPQL | Native         |
+| -------------- | ---- | -------------- |
+| Uses Entity    | ✅    | ❌              |
+| Uses Table     | ❌    | ✅              |
+| DB independent | ✅    | ❌              |
+| Performance    | Good | Best           |
+| Type safety    | High | Low            |
+| Recommended    | ✅    | Only if needed |
+
+---
+
+## 1️⃣1️⃣ Pagination with JPQL
+
+```java
+@Query("SELECT s FROM Student s")
+Page<Student> findAll(Pageable pageable);
+```
+
+Usage:
+
+```java
+PageRequest.of(0, 10, Sort.by("name"))
+```
+
+---
+
+## 1️⃣2️⃣ Common Mistakes 🚫
+
+❌ Using table name in JPQL
+❌ Forgetting `new` keyword in DTO
+❌ Overusing native queries
+❌ Not using pagination
+❌ Returning entities directly to UI
+
+---
+
+## 🧠 Interview Questions (Must Prepare)
+
+1. Difference between JPQL and Native Query?
+2. When do you use Native Query?
+3. What is DTO projection?
+4. How to avoid N+1 problem?
+5. Can JPQL update data?
+6. Why JPQL is preferred?
+
+---
+
+## ✅ Day 9 Completed 🎉
+Perfect 👍
+This is a **must-know topic for backend + frontend integration**, and it’s asked very often in interviews.
+
+---
+
+# 📘 **Spring Boot JPA – Day 10**
+
+## **Pagination & Sorting (Production + Interview Level)**
+
+---
+
+## 🎯 Day 10 Objectives
+
+By the end of this session, you will:
+
+* Understand **Pagination & Sorting**
+* Use `Page`, `Pageable`, `Sort`
+* Implement pagination in APIs
+* Combine pagination + sorting
+* Avoid common mistakes
+* Be interview-ready
+
+---
+
+## 1️⃣ Why Pagination is Important?
+
+❌ Without pagination:
+
+* Loads thousands of records
+* Slow APIs
+* High memory usage
+* Bad UI performance
+
+✅ With pagination:
+
+* Faster APIs
+* Controlled data
+* Scalable applications
+
+---
+
+## 2️⃣ Pageable Interface (Core Concept)
+
+Spring provides:
+
+```java
+Pageable
+Page
+Sort
+```
+
+---
+
+## 3️⃣ Basic Pagination Example
+
+### Repository
+
+```java
+public interface StudentRepository extends JpaRepository<Student, Long> {
+}
+```
+
+---
+
+### Service
+
+```java
+public Page<Student> getStudents(int page, int size) {
+    Pageable pageable = PageRequest.of(page, size);
+    return studentRepository.findAll(pageable);
+}
+```
+
+---
+
+### Controller
+
+```java
+@GetMapping("/students")
+public Page<Student> getStudents(
+        @RequestParam int page,
+        @RequestParam int size) {
+    return studentService.getStudents(page, size);
+}
+```
+
+---
+
+## 4️⃣ Pagination Response Example
+
+```json
+{
+  "content": [...],
+  "totalElements": 100,
+  "totalPages": 10,
+  "size": 10,
+  "number": 0,
+  "first": true,
+  "last": false
+}
+```
+
+✔ Frontend-friendly
+✔ Easy to build tables
+
+---
+
+## 5️⃣ Sorting Example
+
+### Single Field Sorting
+
+```java
+Pageable pageable =
+    PageRequest.of(0, 5, Sort.by("name"));
+```
+
+### Descending Order
+
+```java
+Sort sort = Sort.by("name").descending();
+PageRequest.of(0, 5, sort);
+```
+
+---
+
+## 6️⃣ Pagination + Sorting (Real World)
+
+```java
+@GetMapping("/students")
+public Page<Student> getStudents(
+        @RequestParam int page,
+        @RequestParam int size,
+        @RequestParam String sortBy,
+        @RequestParam String direction) {
+
+    Sort sort = direction.equalsIgnoreCase("desc")
+            ? Sort.by(sortBy).descending()
+            : Sort.by(sortBy).ascending();
+
+    Pageable pageable = PageRequest.of(page, size, sort);
+    return studentService.getStudents(pageable);
+}
+```
+
+---
+
+## 7️⃣ Pagination with JPQL
+
+```java
+@Query("SELECT s FROM Student s WHERE s.name LIKE %:name%")
+Page<Student> findByName(@Param("name") String name, Pageable pageable);
+```
+
+---
+
+## 8️⃣ Pagination with Native Query
+
+⚠️ Requires count query!
+
+```java
+@Query(
+  value = "SELECT * FROM student",
+  countQuery = "SELECT count(*) FROM student",
+  nativeQuery = true
+)
+Page<Student> findAllStudents(Pageable pageable);
+```
+
+---
+
+## 9️⃣ DTO Pagination (Best Practice)
+
+```java
+@Query("""
+   SELECT new com.dto.StudentDTO(s.id, s.name)
+   FROM Student s
+""")
+Page<StudentDTO> findStudents(Pageable pageable);
+```
+
+✔ Faster
+✔ Secure
+✔ API-friendly
+
+---
+
+## 🔟 Common Mistakes ❌
+
+❌ Using `List` instead of `Page`
+❌ No sorting → inconsistent results
+❌ Large page size (1000+)
+❌ Exposing entity directly
+❌ Not using index in DB
+
+---
+
+## 🧠 Interview Questions (Must Prepare)
+
+1. Difference between `Page` and `Slice`
+2. What is Pageable?
+3. How pagination works internally?
+4. How to sort dynamically?
+5. Difference between pagination & limit?
+6. Why count query is required?
+
+---
+
+## ✅ Day 10 Completed 🎉
+
+---
+Excellent 👍
+You’re now entering one of the **most important backend concepts** — **Transaction Management**.
+This is asked in **almost every Spring Boot interview**.
+
+---
+
+# 📘 **Spring Boot JPA – Day 11**
+
+## **Transaction Management (`@Transactional`)**
+
+---
+
+## 🎯 Day 11 Objectives
+
+By the end of this session, you will:
+
+* Understand **what a transaction is**
+* Learn **ACID properties**
+* Understand **@Transactional**
+* Know **propagation types**
+* Learn **rollback rules**
+* Avoid common mistakes
+* Answer interview questions confidently
+
+---
+
+## 1️⃣ What is a Transaction?
+
+A **transaction** is a sequence of database operations that must be:
+
+> **All successful or all rolled back**
+
+Example:
+
+* Debit money 💰
+* Credit money 💳
+  If one fails → rollback everything
+
+---
+
+## 2️⃣ ACID Properties (Interview Must)
+
+| Property    | Meaning                      |
+| ----------- | ---------------------------- |
+| Atomicity   | All or nothing               |
+| Consistency | DB remains valid             |
+| Isolation   | Transactions don’t interfere |
+| Durability  | Data persists after commit   |
+
+---
+
+## 3️⃣ What is `@Transactional`?
+
+`@Transactional` ensures:
+
+* Auto commit
+* Auto rollback on failure
+* Transaction boundary control
+
+---
+
+## 4️⃣ Where to Use `@Transactional`?
+
+✅ Service Layer (Best Practice)
+
+❌ Controller
+❌ Repository (already transactional internally)
+
+---
+
+## 5️⃣ Basic Example
+
+```java
+@Service
+public class StudentService {
+
+    @Transactional
+    public void saveStudent(Student student) {
+        studentRepository.save(student);
+        courseRepository.save(course);
+    }
+}
+```
+
+✔ Both save
+❌ If one fails → rollback
+
+---
+
+## 6️⃣ Rollback Rules (Very Important)
+
+### Default behavior:
+
+| Exception Type    | Rollback |
+| ----------------- | -------- |
+| RuntimeException  | ✅        |
+| Error             | ✅        |
+| Checked Exception | ❌        |
+
+---
+
+### Force Rollback
+
+```java
+@Transactional(rollbackFor = Exception.class)
+```
+
+---
+
+## 7️⃣ Propagation Types (🔥 Interview Favorite)
+
+### Common Ones:
+
+| Type          | Description                 |
+| ------------- | --------------------------- |
+| REQUIRED      | Join existing or create new |
+| REQUIRES_NEW  | Always new transaction      |
+| SUPPORTS      | Use if exists               |
+| NOT_SUPPORTED | Runs without transaction    |
+| MANDATORY     | Must have transaction       |
+| NEVER         | Must not have transaction   |
+
+---
+
+### Example
+
+```java
+@Transactional(propagation = Propagation.REQUIRES_NEW)
+public void saveAuditLog() { }
+```
+
+---
+
+## 8️⃣ Isolation Levels (Advanced but Important)
+
+| Level            | Problem Solved                |
+| ---------------- | ----------------------------- |
+| READ_UNCOMMITTED | Dirty reads                   |
+| READ_COMMITTED   | Prevents dirty reads          |
+| REPEATABLE_READ  | Prevents non-repeatable reads |
+| SERIALIZABLE     | Full isolation                |
+
+```java
+@Transactional(isolation = Isolation.READ_COMMITTED)
+```
+
+---
+
+## 9️⃣ Common Mistakes 🚫
+
+❌ Using @Transactional in private method
+❌ Calling transactional method from same class
+❌ Using it in Controller
+❌ Catching exception and not rethrowing
+❌ Using rollbackFor incorrectly
+
+---
+
+## 🔟 Real-World Example
+
+```java
+@Transactional
+public void enrollStudent(Student student, Course course) {
+    studentRepository.save(student);
+    
+    if(course == null) {
+        throw new RuntimeException("Course not found");
+    }
+
+    courseRepository.save(course);
+}
+```
+
+✔ If course fails → student rollback
+
+---
+
+## 🧠 Interview Questions (Must Prepare)
+
+1. What is @Transactional?
+2. Where should we use it?
+3. Difference between REQUIRED & REQUIRES_NEW?
+4. What exceptions cause rollback?
+5. What happens if exception is caught?
+6. Why not use @Transactional in controller?
+
+---
+
+## ✅ Day 11 Completed 🎉
+
+---
+Great question 👍 — and very common confusion.
+Let’s clear this **once and for all**, because **@Override and @Transactional are completely different things**, used for **different purposes**, even though both appear often in real projects.
+
+---
+
+# ✅ `@Override` vs `@Transactional` — Clear Explanation
+
+## 🔹 1. What is `@Override`?
+
+### ✅ Purpose:
+
+`@Override` is a **Java annotation**, not Spring-specific.
+
+It tells the compiler:
+
+> “This method is overriding a method from parent class or interface.”
+
+---
+
+### Example:
+
+```java
+@Service
+public class StudentServiceImpl implements StudentService {
+
+    @Override
+    public Student getStudentById(Long id) {
+        return studentRepository.findById(id).orElse(null);
+    }
+}
+```
+
+### ✅ Why we use it:
+
+* Prevents method name mistakes
+* Ensures correct method overriding
+* Helps compiler catch errors
+
+### ❌ What it does NOT do:
+
+* ❌ No transaction handling
+* ❌ No database behavior
+* ❌ No Spring magic
+
+---
+
+## 🔹 2. What is `@Transactional`?
+
+### ✅ Purpose:
+
+`@Transactional` is a **Spring annotation**.
+
+It controls:
+
+* Database transactions
+* Commit & rollback behavior
+* Data consistency
+
+---
+
+### Example:
+
+```java
+@Transactional
+public void saveStudent(Student student) {
+    studentRepository.save(student);
+    courseRepository.save(course);
+}
+```
+
+### What it does:
+
+✔ Opens DB transaction
+✔ Commits if success
+✔ Rolls back if exception occurs
+
+---
+
+## 🔍 Key Difference (Interview Important)
+
+| Feature          | @Override                  | @Transactional         |
+| ---------------- | -------------------------- | ---------------------- |
+| Type             | Java annotation            | Spring annotation      |
+| Purpose          | Method override validation | Transaction management |
+| Affects DB       | ❌ No                       | ✅ Yes                  |
+| Used in          | Interface implementation   | Service layer          |
+| Mandatory        | No                         | Yes (for transactions) |
+| Runtime behavior | Compile-time check         | Runtime behavior       |
+
+---
+
+## 🔥 Why You See `@Override` Everywhere in Real Projects
+
+Because:
+
+1. Service implements interface
+2. Repository implements JPA interface
+3. Controllers implement contracts
+4. Clean architecture follows interface-based design
+
+Example:
+
+```java
+public interface StudentService {
+    Student saveStudent(Student s);
+}
+
+@Service
+public class StudentServiceImpl implements StudentService {
+
+    @Override
+    public Student saveStudent(Student s) {
+        return studentRepository.save(s);
+    }
+}
+```
+
+👉 `@Override` ensures correctness
+👉 `@Transactional` ensures data safety
+
+---
+
+## ⚠️ Common Misunderstanding
+
+### ❌ Wrong assumption:
+
+> “We used @Override earlier, so it handled transactions”
+
+🚫 **False**
+
+`@Override` has **ZERO relation** to database or transactions.
+
+---
+
+## ✅ Correct Usage Together (Real Project Example)
+
+```java
+@Service
+public class StudentServiceImpl implements StudentService {
+
+    @Override
+    @Transactional
+    public Student saveStudent(Student student) {
+        return studentRepository.save(student);
+    }
+}
+```
+
+✔ `@Override` → correctness
+✔ `@Transactional` → DB safety
+
+---
+
+## 🧠 Interview Answer (Perfect Response)
+
+> **@Override** is a Java annotation used to ensure a method correctly overrides a parent method.
+> **@Transactional** is a Spring annotation used to manage database transactions and handle commit/rollback.
+> They serve completely different purposes and are often used together in service classes.
+
+---
+
+## ✅ Summary (One Look)
+
+| Annotation       | Used For                   | Layer           |
+| ---------------- | -------------------------- | --------------- |
+| `@Override`      | Method override validation | Java            |
+| `@Transactional` | Transaction management     | Service layer   |
+| Can be together? | ✅ Yes                      | Common practice |
+
+---
+
+If you want, next I can explain:
+👉 **Why @Transactional doesn’t work in private methods**
+👉 **Why calling same-class methods breaks transaction**
+👉 **Real-time bug caused by missing @Transactional**
+
+Just tell me 👍
+
+
+Perfect 👍
+Let’s go step-by-step and clear **one of the most confusing (and interview-critical)** parts of Spring Boot.
+
+---
+
+# 🔥 Why `@Transactional` Sometimes DOES NOT Work
+
+This happens **very often in real projects**, and many developers don’t realize why.
+
+We’ll cover:
+
+1. ❌ Why `@Transactional` doesn’t work in **private methods**
+2. ❌ Why calling a method **inside the same class** breaks transaction
+3. ✅ Correct way to use `@Transactional`
+4. 💡 Real-world example + interview explanation
+
+---
+
+## 1️⃣ Why `@Transactional` Does NOT Work on `private` Methods
+
+### ❌ Wrong
+
+```java
+@Transactional
+private void saveStudent(Student s) {
+    studentRepository.save(s);
+}
+```
+
+### ❗ Why it fails:
+
+Spring uses **AOP (Proxy-based mechanism)**
+➡️ Proxy can only intercept **public methods**
+
+🔴 Private methods:
+
+* Are not proxied
+* Are called directly
+* Transaction never starts
+
+### ✅ Correct
+
+```java
+@Transactional
+public void saveStudent(Student s) {
+    studentRepository.save(s);
+}
+```
+
+---
+
+## 2️⃣ Why `@Transactional` Fails When Calling Same Class Method
+
+### ❌ Common Mistake
+
+```java
+@Service
+public class StudentService {
+
+    public void registerStudent() {
+        saveStudent(); // ❌ Transaction will NOT work
+    }
+
+    @Transactional
+    public void saveStudent() {
+        studentRepository.save(new Student());
+    }
+}
+```
+
+### ❗ Why?
+
+Spring creates a **proxy object**.
+
+But when:
+
+```java
+this.saveStudent();
+```
+
+➡️ The call does **NOT go through proxy**
+➡️ It calls the method directly
+➡️ Transaction is skipped ❌
+
+---
+
+## 3️⃣ Correct Ways to Fix This
+
+### ✅ Solution 1: Move Method to Another Service (Best Practice)
+
+```java
+@Service
+public class StudentService {
+
+    private final StudentTxService txService;
+
+    public StudentService(StudentTxService txService) {
+        this.txService = txService;
+    }
+
+    public void registerStudent() {
+        txService.saveStudent();
+    }
+}
+```
+
+```java
+@Service
+public class StudentTxService {
+
+    @Transactional
+    public void saveStudent() {
+        studentRepository.save(new Student());
+    }
+}
+```
+
+✔ Proxy works
+✔ Transaction works
+✔ Best practice
+
+---
+
+### ✅ Solution 2: Self Injection (Less Preferred)
+
+```java
+@Autowired
+private StudentService self;
+
+public void registerStudent() {
+    self.saveStudent(); // goes through proxy
+}
+```
+
+⚠️ Works but not recommended for clean architecture.
+
+---
+
+## 4️⃣ Why Spring Behaves Like This (Interview Gold)
+
+Because Spring:
+
+* Uses **AOP proxies**
+* Applies `@Transactional` at **runtime**
+* Proxy works only when:
+
+    * Method is public
+    * Method is called from outside the class
+
+---
+
+## 5️⃣ Real-World Bug Example 🚨
+
+### Code:
+
+```java
+@Transactional
+public void createOrder() {
+    saveOrder();
+    savePayment(); // fails
+}
+```
+
+### Result:
+
+❌ Order saved
+❌ Payment failed
+❌ Data inconsistency
+
+### Why?
+
+Because `savePayment()` was private / same class call.
+
+---
+
+## 6️⃣ Correct Real-World Design
+
+```
+Controller
+   ↓
+Service (Transactional)
+   ↓
+Repository
+```
+
+✔ Transaction starts
+✔ All DB calls tracked
+✔ Rollback works
+
+---
+
+## 🧠 Interview Questions & Perfect Answers
+
+### ❓ Why @Transactional doesn’t work in private methods?
+
+👉 Because Spring uses proxy-based AOP which cannot intercept private methods.
+
+---
+
+### ❓ Why calling a transactional method from same class fails?
+
+👉 Because internal method calls bypass Spring proxy.
+
+---
+
+### ❓ Where should @Transactional be used?
+
+👉 On **public service layer methods**.
+
+---
+
+### ❓ How to fix transactional issues?
+
+👉 Use:
+
+* Separate service
+* Public methods
+* Proper layering
+
+---
+
+## ✅ Final Summary (Important)
+
+| Rule                          | Status |
+| ----------------------------- | ------ |
+| Use @Transactional on service | ✅      |
+| Use on private method         | ❌      |
+| Call from same class          | ❌      |
+| Use in controller             | ❌      |
+| Use in separate service       | ✅      |
+| Combine with @Override        | ✅      |
+
+---
+
+Perfect 👍
+You’ve reached **one of the most important production-level topics** in Spring Boot.
+
+---
+
+# 📘 **Day 12 – Global Exception Handling**
+
+## (Using `@ControllerAdvice` & `@ExceptionHandler`)
+
+This is **mandatory knowledge** for:
+
+* Backend interviews
+* Real-world APIs
+* Clean error responses
+* Frontend–backend integration
+
+---
+
+## 🎯 Day 12 Objectives
+
+By the end of this session, you will:
+
+* Understand **why global exception handling is needed**
+* Learn **@ControllerAdvice**
+* Use **@ExceptionHandler**
+* Create **custom exceptions**
+* Return **standard error responses**
+* Follow **industry best practices**
+
+---
+
+## 1️⃣ Why Do We Need Global Exception Handling?
+
+### ❌ Without Exception Handling:
+
+```json
+{
+  "timestamp": "...",
+  "status": 500,
+  "error": "Internal Server Error",
+  "trace": "Huge stack trace..."
+}
+```
+
+👎 Bad for:
+
+* Frontend
+* Security
+* User experience
+
+---
+
+### ✅ With Global Exception Handling:
+
+```json
+{
+  "status": 404,
+  "message": "Student not found",
+  "timestamp": "2026-01-26"
+}
+```
+
+✔ Clean
+✔ Predictable
+✔ Professional
+
+---
+
+## 2️⃣ What is `@ControllerAdvice`?
+
+`@ControllerAdvice` = **Global Exception Handler**
+
+It catches exceptions thrown by:
+
+* Controllers
+* Services
+* Repositories
+
+---
+
+## 3️⃣ Basic Global Exception Handler
+
+```java
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<String> handleException(Exception ex) {
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ex.getMessage());
+    }
+}
+```
+
+✔ Handles all exceptions
+✔ Prevents stack trace exposure
+
+---
+
+## 4️⃣ Custom Exception (Best Practice)
+
+### Step 1: Create Exception
+
+```java
+public class ResourceNotFoundException extends RuntimeException {
+
+    public ResourceNotFoundException(String message) {
+        super(message);
+    }
+}
+```
+
+---
+
+### Step 2: Throw Exception
+
+```java
+public Student getStudent(Long id) {
+    return studentRepository.findById(id)
+        .orElseThrow(() ->
+            new ResourceNotFoundException("Student not found with id: " + id)
+        );
+}
+```
+
+---
+
+### Step 3: Handle Globally
+
+```java
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex) {
+
+        ApiError error = new ApiError(
+                HttpStatus.NOT_FOUND.value(),
+                ex.getMessage(),
+                LocalDateTime.now()
+        );
+
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    }
+}
+```
+
+---
+
+## 5️⃣ Create a Standard Error Response (Recommended)
+
+```java
+public class ApiError {
+    private int status;
+    private String message;
+    private LocalDateTime timestamp;
+
+    // constructor + getters
+}
+```
+
+---
+
+## 6️⃣ Handle Validation Errors (`@Valid`)
+
+### Example DTO
+
+```java
+@NotBlank
+@Email
+private String email;
+```
+
+---
+
+### Exception Handler
+
+```java
+@ExceptionHandler(MethodArgumentNotValidException.class)
+public ResponseEntity<Map<String, String>> handleValidationErrors(
+        MethodArgumentNotValidException ex) {
+
+    Map<String, String> errors = new HashMap<>();
+
+    ex.getBindingResult().getFieldErrors().forEach(error ->
+        errors.put(error.getField(), error.getDefaultMessage())
+    );
+
+    return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
+}
+```
+
+---
+
+## 7️⃣ Common Exceptions You Should Handle
+
+| Exception                       | HTTP Status |
+| ------------------------------- | ----------- |
+| ResourceNotFoundException       | 404         |
+| MethodArgumentNotValidException | 400         |
+| IllegalArgumentException        | 400         |
+| AccessDeniedException           | 403         |
+| Exception                       | 500         |
+
+---
+
+## 8️⃣ Real-World Example (Clean API Response)
+
+### Request:
+
+```
+GET /students/99
+```
+
+### Response:
+
+```json
+{
+  "status": 404,
+  "message": "Student not found with id: 99",
+  "timestamp": "2026-01-26T10:30:00"
+}
+```
+
+---
+
+## 9️⃣ Common Mistakes ❌
+
+❌ Handling exception in controller
+❌ Returning stack trace to UI
+❌ Using Exception everywhere
+❌ No common response format
+❌ Throwing RuntimeException blindly
+
+---
+
+## 🧠 Interview Questions (Must Prepare)
+
+1. What is `@ControllerAdvice`?
+2. Difference between `@ExceptionHandler` and `@ControllerAdvice`?
+3. How to handle validation errors?
+4. Why not handle exceptions in controller?
+5. How to return custom error response?
+
+---
+
+## ✅ Day 12 Completed 🎉
+
+---
+
